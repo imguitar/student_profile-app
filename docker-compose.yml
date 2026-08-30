@@ -1,0 +1,87 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: student-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: university
+      MYSQL_USER: ${MYSQL_USER:-student_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-student_password}
+      TZ: Asia/Bangkok
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - student-network
+
+  backend:
+    build:
+      context: ./backend
+    container_name: student-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: university
+      DB_USER: ${MYSQL_USER:-student_app}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-student_password}
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - student-network
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: student-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - student-network
+
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    container_name: student-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "${PHPMYADMIN_PORT:-8080}:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - student-network
+
+volumes:
+  mysql_data:
+
+networks:
+  student-network:
+    driver: bridge
