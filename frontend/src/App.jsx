@@ -36,8 +36,11 @@ async function request(url, options) {
   });
 
   if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data.message || 'ไม่สามารถเชื่อมต่อระบบได้');
+  if (data === null) {
+    throw new Error('API ส่งข้อมูลกลับมาในรูปแบบไม่ถูกต้อง กรุณาตรวจสอบ VITE_API_URL');
+  }
   return data;
 }
 
@@ -167,6 +170,9 @@ export default function App() {
     setLoading(true);
     try {
       const data = await request(apiUrl('/students'));
+      if (!Array.isArray(data)) {
+        throw new Error('ข้อมูลนักศึกษาจาก API ไม่ใช่รายการ กรุณาตรวจสอบ VITE_API_URL');
+      }
       setStudents(data);
     } catch (error) {
       setNotice({ type: 'error', text: error.message });
